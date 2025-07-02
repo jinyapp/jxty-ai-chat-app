@@ -1,0 +1,21 @@
+{
+  "files": [],
+    "compilerOptions": {
+    "composite": true,
+    "declaration": false,
+    "incremental": true,
+    "noEmit": true,
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext", "dom"],
+    "strict": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "./dist"
+  },
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

@@ -1,0 +1,54 @@
+.chat-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(97deg, #f2f9fe 0%, #f7f3ff 100%);
+  /* padding:'16px', */
+
+  /* height: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+  background: 'linear-gradient(97deg, #f2f9fe 0%, #f7f3ff 100%)',
+  padding: isMobile ? '16px' : '24px', */
+}
+
+.chat-messages-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 16px;
+  margin-bottom: 16px;
+}
+
+/* 移动端适配 */
+@media screen and (max-width: 768px) {
+  .chat-container {
+    padding: 8px;
+  }
+
+  .ChatFooter {
+    min-height: 60px !important;
+    padding: 8px !important;
+  }
+
+  .Composer {
+    min-height: 44px !important;
+  }
+
+  .Composer-input {
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* 强制覆盖 Chat 组件默认样式 */
+:global(.ChatApp) {
+  --custom-chat-footer-min-height: 60px;
+  --custom-message-bg-color: rgba(255, 255, 255, 0.9);
+  --custom-message-min-width: 44px;
+  --custom-message-max-width: 80%;
+  --custom-message-border-radius: 12px;
+}
