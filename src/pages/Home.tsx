@@ -12,6 +12,9 @@ import { marked } from 'marked';
 import OpenAI from "openai";
 import { doubaoASR } from '../utils/doubaoAsr';
 import { post } from '../utils/request';
+import axios from 'axios';
+import { getApiBaseUrl } from '../utils/env';
+import { volcAsr } from '../utils/volcAsr';
 
 // 判断是否是 Hybrid App 环境
 const isHybridApp = () => {
@@ -86,35 +89,32 @@ const toolbar: ToolbarItemProps[] = [
   },
 ];
 
-const getUserInfo = () => {
-  return new Promise((resolve) => {
-    if (window.setupWebViewJavascriptBridge) {
-      window.setupWebViewJavascriptBridge(function (bridge) {
-        bridge.callHandler('getIsclientstate', {}, function (data) {
-          let userInfo;
-          try {
-            userInfo = typeof data === 'string' ? JSON.parse(data) : data;
-          } catch (e) {
-            userInfo = data;
-          }
-          if (!userInfo || !userInfo.account) {
-            userInfo = { account: 'admin', password: '112233445566' };
-          }
-          resolve(userInfo);
-        });
+const getUserInfo = (callback) => {
+  if (window.setupWebViewJavascriptBridge) {
+    window.setupWebViewJavascriptBridge(function (bridge) {
+      bridge.callHandler("getIsclientstate", {}, function (data) {
+        let userInfo;
+        try {
+          userInfo = JSON.parse(data);
+        } catch (e) {
+          userInfo = data;
+        }
+        if (!userInfo || !userInfo.account) {
+          userInfo = {
+            account: "admin",
+            password: "112233445566"
+          };
+        }
+        callback(userInfo);
       });
-    } else {
-      resolve({ account: 'admin', password: '112233445566' });
-    }
-  });
+    });
+  } else {
+    callback({ account: 'admin', password: '112233445566' });
+  }
 };
 
 const Home = () => {
-  // const msgRef = useRef(null);
-  // const msgRef = useRef('');
-  // const typingMsgId = useRef('');
   const isMobile = useIsMobile();
-  // @ts-ignore: 'inputValue' is declared but its value is never read.
   const [inputValue, setInputValue] = useState('');
   const { messages, appendMsg, updateMsg } = useMessages([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -122,9 +122,10 @@ const Home = () => {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [content, setContent] = useState('');
   const [reasoningContent, setReasoningContent] = useState('');
+  const [isRecording, setIsRecording] = useState(false); // 录音状态
 
   useEffect(() => {
-    getUserInfo().then((info) => setUserInfo(info));
+    getUserInfo((info) => setUserInfo(info));
   }, []);
 
   // 发送消息
@@ -139,6 +140,14 @@ const Home = () => {
       const thinkingMsg = appendMsg({
         type: 'thinking',
         content: { text: '让我思考一下...' },
+        position: 'left',
+      });
+
+      let streamContent = '';
+      let streamReasoningContent = '';
+      const streamMsg = appendMsg({
+        type: 'stream',
+        content: { text: '' },
         position: 'left',
       });
 
@@ -158,16 +167,69 @@ const Home = () => {
           chat_type: 0,
           appId: ''
         };
-        const res = await post('http://localhost:1003/api/chat/send', body);
-        setContent(res.content || '');
-        setReasoningContent(res.reasoning_content || '');
-        updateMsg(thinkingMsg, {
-          type: 'text',
-          content: { text: (res.content || '') + '\n' + (res.reasoning_content || '') },
+        const response = await fetch(getApiBaseUrl() + 'chat/send', {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { 'Content-Type': 'application/json' }
         });
+
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.trim() || line.startsWith(':')) continue;
+            let dataLine = line;
+            if (dataLine.startsWith('data:')) {
+              dataLine = dataLine.replace(/^data:\s*/, '');
+            }
+            if (dataLine === '[DONE]') {
+              updateMsg(thinkingMsg, {
+                type: 'text',
+                content: { text: (streamContent || '') + '\n' + (streamReasoningContent || '') },
+              });
+              setContent(streamContent);
+              setReasoningContent(streamReasoningContent);
+              return;
+            }
+            let chunk;
+            try {
+              chunk = JSON.parse(dataLine);
+            } catch {
+              continue;
+            }
+            const contentPiece = chunk.content || '';
+            const reasoningPiece = chunk.reasoning_content || '';
+            if (contentPiece) {
+              streamContent += contentPiece;
+              setContent(streamContent);
+              updateMsg(streamMsg, {
+                type: 'stream',
+                content: { text: streamContent },
+              });
+            }
+            if (reasoningPiece) {
+              streamReasoningContent += reasoningPiece;
+              setReasoningContent(streamReasoningContent);
+              updateMsg(thinkingMsg, {
+                type: 'thinking',
+                content: { text: `让我思考一下...\n\n${streamReasoningContent}` },
+              });
+            }
+          }
+        }
       } catch (error) {
-        setContent('请求失败');
-        setReasoningContent('');
         updateMsg(thinkingMsg, {
           type: 'text',
           content: { text: '抱歉，服务器出现了一些问题，请稍后再试。' },
@@ -274,6 +336,8 @@ const startAudioRecordAndUpload = (callback: (text: string) => void) => {
     return;
   }
 
+  setIsRecording(true); // 开始录音状态
+
   navigator.mediaDevices.getUserMedia({ audio: true })
     .then((stream) => {
       const mediaRecorder = new MediaRecorder(stream);
@@ -287,21 +351,63 @@ const startAudioRecordAndUpload = (callback: (text: string) => void) => {
       };
 
       mediaRecorder.onstop = async () => {
+        setIsRecording(false); // 结束录音状态
+        
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         audioChunksRef.current = [];
+        
+        // 检查录音时长
+        if (audioBlob.size < 1000) { // 小于1KB，可能录音太短
+          alert('录音时间太短，请重新录音');
+          return;
+        }
+
         try {
-          const recognizedText = await doubaoASR(audioBlob);
-          callback(recognizedText);
+          console.log('🎤 开始语音识别...');
+          const recognizedText = await volcAsr(audioBlob);
+          
+          if (recognizedText && recognizedText.trim()) {
+            console.log('✅ 语音识别成功:', recognizedText);
+            
+            // 语音识别成功后的处理逻辑
+            setInputValue(recognizedText); // 设置输入框显示
+            
+            // 自动发送对话
+            await handleSend('text', recognizedText);
+            
+            // 调用回调（如果有的话）
+            callback(recognizedText);
+          } else {
+            alert('未能识别到语音内容，请重新录音');
+          }
         } catch (err) {
-          console.error('ASR 失败:', err);
+          console.error('❌ 语音识别失败:', err);
           alert('语音识别失败，请重试');
+        } finally {
+          // 清理资源
+          stream.getTracks().forEach(track => track.stop());
+          mediaRecorderRef.current = null;
         }
       };
 
+      mediaRecorder.onerror = (event) => {
+        setIsRecording(false);
+        console.error('录音错误:', event);
+        alert('录音出现错误，请重试');
+      };
+
       mediaRecorder.start();
-      console.log('✅ 开始录音');
+      console.log('🎤 开始录音...');
+      
+      // 最长录音时间限制（10秒）
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      }, 10000);
     })
     .catch((err) => {
+      setIsRecording(false);
       console.error('获取媒体权限失败:', err);
       alert('无法访问麦克风，请检查权限设置');
     });
@@ -311,6 +417,8 @@ const startAudioRecordAndUpload = (callback: (text: string) => void) => {
 const startNativeVoiceRecognition = (callback: (text: string) => void) => {
   window.NativeBridge.startVoiceRecognition((recognizedText: string) => {
     if (recognizedText) {
+      setInputValue(recognizedText);
+      handleSend('text', recognizedText);
       callback(recognizedText);
     }
   });
@@ -318,91 +426,53 @@ const startNativeVoiceRecognition = (callback: (text: string) => void) => {
 
 // 统一入口：根据环境选择合适的语音识别方式
 const startVoiceRecognition = (callback: (text: string) => void) => {
-  // if (isHybridApp()) {
-  //   startNativeVoiceRecognition(callback);
-  // } else if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-  //   startWebSpeechRecognition(callback);
-  // } else {
-  //   // 备用方案：录音后上传到豆包 ASR
-  //   startAudioRecordAndUpload(callback);
-  // }
-
   if (isHybridApp()) {
     startNativeVoiceRecognition(callback);
   } else {
-    // 直接使用 MediaRecorder + doubaoASR 作为唯一方案
+    // 使用 MediaRecorder + volcAsr 作为方案
     startAudioRecordAndUpload(callback);
   }
 };
-// onStart：用户按住输入框时触发，立即开始录音
+
+// 录音控制
 const handleRecorderStart = () => {
   if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-    console.warn('录音已经在进行中');
     return;
   }
-  // console.log('开始录音');
   startVoiceRecognition((recognizedText) => {
-    console.log('识别结果:', recognizedText); // 先打印看看是什么类型
-    if (recognizedText && typeof recognizedText === 'string') {
-      setInputValue(recognizedText);
-      handleSend('text', recognizedText);
-    }
+    console.log('语音识别完成:', recognizedText);
   });
 };
-// onEnd：用户松手时触发，结束录音
-// const handleRecorderEnd = () => {
-//   if (isHybridApp()) {
-//     window.NativeBridge.stopVoiceRecognition();
-//   } else if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-//     // 对于支持 Web Speech API 的环境，不需要额外处理
-//     return;
-//   } else {
-//     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-//       mediaRecorderRef.current.stop();
-//       console.log('MediaRecorder 已停止');
-//     }
-//   }
-// };
 
 const handleRecorderEnd = () => {
-  console.log('⏹️ 结束录音');
   if (isHybridApp()) {
     window.NativeBridge.stopVoiceRecognition();
   } else {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop(); // 必须显式 stop()
-      console.log('✅ MediaRecorder 已停止');
+      mediaRecorderRef.current.stop();
     }
   }
 };
-  // recorder 属性配置
-  const recorderProps = {
-    canRecord: true,
-    volume: 0.6,
-    onStart: () => {
-      console.log('开始录音');
-      handleRecorderStart()
-    },
-    onEnd: () => {
-      console.log('结束录音');
-      handleRecorderEnd()
-      // startVoiceRecognition((recognizedText) => {
-      //   if (recognizedText) {
-      //     console.log('识别结果:', recognizedText); // 先打印看看是什么类型
-      //     if (typeof recognizedText === 'string') {
-      //       setInputValue(recognizedText);
-      //       handleSend('text', recognizedText);
-      //     }
-      //   }
-      // });
-    },
-    onCancel: () => {
-      console.log('取消录音');
-      if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-    },
-  };
+
+// recorder 属性配置
+const recorderProps = {
+  canRecord: true,
+  volume: 0.6,
+  onStart: () => {
+    console.log('开始录音');
+    handleRecorderStart();
+  },
+  onEnd: () => {
+    console.log('结束录音');
+    handleRecorderEnd();
+  },
+  onCancel: () => {
+    console.log('取消录音');
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  },
+};
   return (
     <div className="chat-container" style={{ 
       padding: isMobile ? '16px' : '50px',
@@ -420,11 +490,6 @@ const handleRecorderEnd = () => {
           </div>
         }
       />
-      {/* 新增内容展示 */}
-      <div style={{marginBottom: 8, fontWeight: 'bold'}}>内容：</div>
-      <div style={{marginBottom: 16}}>{content}</div>
-      <div style={{marginBottom: 8, fontWeight: 'bold'}}>推理内容：</div>
-      <div>{reasoningContent}</div>
       
       <div style={{
         margin: isMobile ? '0px 0' : '16px 0',
@@ -488,6 +553,22 @@ const handleRecorderEnd = () => {
           onImageSend={() => Promise.resolve()}
         />
       </div>
+
+      {isRecording && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '50%', 
+          left: '50%', 
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '20px',
+          borderRadius: '10px',
+          zIndex: 1000
+        }}>
+          🎤 正在录音...
+        </div>
+      )}
     </div>
   );
 }

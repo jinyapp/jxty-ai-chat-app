@@ -138,11 +138,11 @@ const items = [
         icon: <CommentOutlined />,
         description: `3、太原游玩需要注意什么`,
       },
-      {
-        key: '2-4',
-        icon: <CommentOutlined />,
-        description: `4、周末亲子游`,
-      },
+      // {
+      //   key: '2-4',
+      //   icon: <CommentOutlined />,
+      //   description: `4、周末亲子游`,
+      // },
     ],
   },
 ];
@@ -292,7 +292,7 @@ const HomePage = () => {
           }
         />
 
-        <div
+        {/* <div
           style={{
             margin: isMobile ? '16px 0' : '24px 0',
             padding: '16px',
@@ -305,9 +305,9 @@ const HomePage = () => {
           <div style={{marginBottom: 16}}>{content}</div>
           <div style={{marginBottom: 8, fontWeight: 'bold'}}>推理内容：</div>
           <div>{reasoningContent}</div>
-        </div>
+        </div> */}
 
-        <div
+        {/* <div
           style={{
             margin: isMobile ? '16px 0' : '24px 0',
             padding: '16px',
@@ -355,7 +355,7 @@ const HomePage = () => {
             ))}
           </Slider>
           
-        </div>
+        </div> */}
 
         <ConfigProvider
           theme={{
