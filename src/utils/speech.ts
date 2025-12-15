@@ -1,12 +1,37 @@
 import { message } from 'antd'; // 假设你使用 ant-design 的 message 提示
 
 // ========================== 语音识别函数 ==========================
+type RecognitionResultEvent = {
+  results: {
+    [index: number]: { [index: number]: { transcript: string } }
+  };
+};
+type RecognitionErrorEvent = { error: string };
+interface ISpeechRecognition {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onresult: (event: RecognitionResultEvent) => void;
+  onerror: (event: RecognitionErrorEvent) => void;
+  onend: () => void;
+  start: () => void;
+  stop: () => void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => ISpeechRecognition;
+    webkitSpeechRecognition?: new () => ISpeechRecognition;
+  }
+}
+
 export const startSpeechRecognition = (): Promise<string> => {
   return new Promise((resolve, reject) => {
     // 兼容性检查
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       message.error('当前浏览器不支持语音识别');
@@ -25,7 +50,7 @@ export const startSpeechRecognition = (): Promise<string> => {
     let isRecognizing = true;
 
     // 成功回调
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: RecognitionResultEvent) => {
       if (!isRecognizing) return;
       isRecognizing = false;
 
@@ -35,7 +60,7 @@ export const startSpeechRecognition = (): Promise<string> => {
     };
 
     // 错误处理
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: RecognitionErrorEvent) => {
       if (!isRecognizing) return;
       isRecognizing = false;
 
@@ -79,10 +104,10 @@ export const startSpeechRecognition = (): Promise<string> => {
     // 启动识别
     try {
       recognition.start();
-    } catch (error) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
       message.error('启动语音识别失败，请重试');
-      reject(error);
+      reject(error as Error);
     }
   });
 };

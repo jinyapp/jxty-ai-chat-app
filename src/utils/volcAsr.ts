@@ -1,10 +1,10 @@
-import { getApiBaseUrl } from './env';
+// 直接使用 import.meta.env.VITE_APP_API_BASE_URL
 
 export async function volcAsr(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
   formData.append('file', audioBlob, 'audio.webm');
   // 假设后端有 /asr/volc 这个接口
-  const resp = await fetch(getApiBaseUrl() + 'chat/doubao_asr', {
+  const resp = await fetch((import.meta.env.VITE_APP_API_BASE_URL || '') + 'chat/doubao_asr', {
     method: 'POST',
     body: formData,
   });

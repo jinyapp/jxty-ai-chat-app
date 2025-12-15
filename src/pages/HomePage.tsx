@@ -1,31 +1,20 @@
-import { Welcome, useXAgent, Sender, XRequest } from '@ant-design/x';
+import { Welcome, Sender } from '@ant-design/x';
 import React, { useState, useEffect, useRef } from 'react';
 import {
     FireOutlined,
     HeartOutlined,
     ReadOutlined,
     CommentOutlined,
-    RocketOutlined,
     SmileOutlined,
-    AppstoreOutlined,
-    BulbOutlined,
-    CloudOutlined,
-    ThunderboltOutlined,
-    QuestionCircleOutlined,
-    AreaChartOutlined,
-    MobileOutlined,
-    SkinOutlined,
-    GlobalOutlined,
-    UserOutlined,
 } from '@ant-design/icons';
 import { Prompts } from '@ant-design/x';
-import { Bubble, useXChat } from '@ant-design/x';
+import { Bubble } from '@ant-design/x';
+import { useXChat } from '@ant-design/x-sdk';
 import {
   App,
   Card,
   ConfigProvider,
   Space,
-  Button,
   theme,
   Flex,GetProp
 } from 'antd';
@@ -34,21 +23,7 @@ import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
 import { post } from '../utils/request';
 
-// 修改配置部分
-const BASE_URL = 'https://dashscope.aliyuncs.com';  // 修改为正确的 API 地址
-const PATH = '/compatible-mode/v1/chat/completions';  // 修改为正确的端点路径
-
-// const BASE_URL = 'https://dashscope.aliyuncs.com';  // 修改为正确的 API 地址
-// const PATH = '/api/v1/services/aigc/text-generation/generation';  // 修改为正确的端点路径
-
-const MODEL = 'qwen-plus';  // 使用正确的模型名称
-const API_KEY = 'Bearer sk-d88f955b81d2412bb055e06f73e8ce55';
-
-const { create } = XRequest({
-  baseURL: BASE_URL + PATH,
-  model: MODEL,
-  dangerouslyApiKey: API_KEY,
-});
+ 
 
 const renderTitle = (icon: React.ReactNode, title: string) => (
   <Space align="start">
@@ -71,18 +46,7 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-const questionSuggestions = [
-  { id: 1, text: "社保查询", icon: <RocketOutlined /> },
-  { id: 2, text: "公积金查询", icon: <AppstoreOutlined /> },
-  { id: 3, text: "医保查询", icon: <BulbOutlined /> },
-  { id: 4, text: "生活缴费", icon: <CloudOutlined /> },
-  { id: 5, text: "话费充值", icon: <ThunderboltOutlined /> },
-  { id: 6, text: "读报纸", icon: <QuestionCircleOutlined /> },
-  { id: 7, text: "看电视", icon: <AreaChartOutlined /> },
-  { id: 8, text: "听广播", icon: <MobileOutlined /> },
-  { id: 9, text: "太原好物", icon: <SkinOutlined /> },
-  { id: 10, text: "文旅资讯", icon: <GlobalOutlined /> },
-];
+ 
 
 const items = [
   {
@@ -146,60 +110,32 @@ const items = [
     ],
   },
 ];
-const roles : GetProp<typeof Bubble.List, 'roles'> = {
+const roleConfig: GetProp<typeof Bubble.List, 'role'> = {
   ai: {
     placement: 'start',
-    avatar: { icon: <UserOutlined />, style: { background: '#fde3cf' } },
   },
   local: {
     placement: 'end',
-    avatar: { icon: <UserOutlined />, style: { background: '#87d068' } },
   },
 
 };
 
-const getUserInfo = () => {
-  return new Promise((resolve) => {
-    if (window.setupWebViewJavascriptBridge) {
-      window.setupWebViewJavascriptBridge(function (bridge) {
-        bridge.callHandler('getIsclientstate', {}, function (data) {
-          let userInfo;
-          try {
-            userInfo = typeof data === 'string' ? JSON.parse(data) : data;
-          } catch (e) {
-            userInfo = data;
-          }
-          if (!userInfo || !userInfo.account) {
-            userInfo = { account: 'admin', password: '112233445566' };
-          }
-          resolve(userInfo);
-        });
-      });
-    } else {
-      resolve({ account: 'admin', password: '112233445566' });
-    }
-  });
-};
+ 
 
 const HomePage = () => {
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
   const [isLoading, setIsLoading] = useState(false);
   const [content, setContent] = useState('');
-  const [reasoningContent, setReasoningContent] = useState('');
-  const [userInfo, setUserInfo] = useState<any>(null);
   const abortRef = useRef(() => {});
 
-  useEffect(() => {
-    getUserInfo().then((info) => setUserInfo(info));
-  }, []);
+  
 
   // 新的发送请求方法
   const handleSend = async (val) => {
     if (!val.trim()) return;
     setIsLoading(true);
     setContent('');
-    setReasoningContent('');
+    
     try {
       const body = {
         max_tokens: 1024,
@@ -216,34 +152,16 @@ const HomePage = () => {
       };
       const res = await post('http://localhost:1003/api/chat/send', body);
       setContent(res.content || '');
-      setReasoningContent(res.reasoning_content || '');
+      
     } catch (e) {
       setContent('请求失败');
-      setReasoningContent('');
+      
     } finally {
       setIsLoading(false);
     }
   };
 
-  const sliderSettings = {
-    dots: false,
-    infinite: true,
-    speed: 1000,
-    slidesToShow: 3,  // 每次显示3个
-    slidesToScroll: 1,
-    autoplay: true,
-    autoplaySpeed: 1000,
-    rows: 2,
-    responsive: [
-      {
-        breakpoint: 768,
-        settings: {
-          slidesToShow: 3,  // 移动端显示2个
-          rows: 2
-        }
-      }
-    ]
-  };
+  
 
   // Card部分的滑动设置
   const cardSliderSettings = {
@@ -259,7 +177,7 @@ const HomePage = () => {
   };
 
   // Chat messages
-  const { onRequest, messages } = useXChat({
+  const { messages } = useXChat({
     // defaultMessages: [], // 添加默认消息
   });
 
@@ -428,7 +346,7 @@ const HomePage = () => {
         }}
       >
       <Bubble.List
-        roles={roles}
+        role={roleConfig}
         // style={{ maxHeight: 300, overflowY: 'auto' }}
         items={messages.map(({ message, id, status }) => ({
           key: id,

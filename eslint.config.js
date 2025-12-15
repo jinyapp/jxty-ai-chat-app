@@ -14,12 +14,20 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   {
+    files: ['**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
+  },
+
+  {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
       parserOptions: {
-        project: './tsconfig.json', // 如果使用 TypeScript 类型检查器
+        project: './tsconfig.app.json', // 如果使用 TypeScript 类型检查器
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -47,6 +55,18 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  }
+  ,
+  {
+    files: ['vite.config.ts'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      parserOptions: {
+        project: './tsconfig.node.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   }
 );
